@@ -429,9 +429,24 @@
             appId: "1:13148890889:web:your-app-id"
         };
 
-        // Initialize Firebase
-        firebase.initializeApp(firebaseConfig);
-        const database = firebase.database();
+        let database;
+
+        // Initialize Firebase with error handling
+        function initializeFirebase() {
+            try {
+                if (firebase.apps.length === 0) {
+                    firebase.initializeApp(firebaseConfig);
+                }
+                database = firebase.database();
+                console.log('Firebase initialized successfully');
+                return true;
+            } catch (error) {
+                console.error('Firebase initialization error:', error);
+                updateConnectionStatus(false);
+                showErrorMessage('Firebase initialization failed: ' + error.message);
+                return false;
+            }
+        }
 
         // DOM elements
         const connectionStatus = document.getElementById('connectionStatus');
@@ -548,52 +563,131 @@
         // Handle product selection change
         productSelector.addEventListener('change', function () {
             const selectedProduct = this.value;
-            if (selectedProduct) {
+            if (selectedProduct && database) {
                 database.ref('selectedItem').set(selectedProduct)
                     .then(() => {
                         console.log('Product selection updated successfully');
+                        showSuccessMessage('Product selection updated');
                     })
                     .catch((error) => {
                         console.error('Error updating product selection:', error);
-                        alert('Failed to update product selection. Please try again.');
+                        showErrorMessage('Failed to update product selection: ' + error.message);
                     });
             }
         });
 
+        // Show error message
+        function showErrorMessage(message) {
+            const errorDiv = document.createElement('div');
+            errorDiv.style.cssText = `
+                position: fixed;
+                top: 80px;
+                right: 20px;
+                background: #e74c3c;
+                color: white;
+                padding: 15px 20px;
+                border-radius: 10px;
+                z-index: 1001;
+                max-width: 300px;
+                font-size: 14px;
+                box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            `;
+            errorDiv.textContent = message;
+            document.body.appendChild(errorDiv);
+
+            setTimeout(() => {
+                if (errorDiv.parentNode) {
+                    errorDiv.parentNode.removeChild(errorDiv);
+                }
+            }, 5000);
+        }
+
+        // Show success message
+        function showSuccessMessage(message) {
+            const successDiv = document.createElement('div');
+            successDiv.style.cssText = `
+                position: fixed;
+                top: 80px;
+                right: 20px;
+                background: #27ae60;
+                color: white;
+                padding: 15px 20px;
+                border-radius: 10px;
+                z-index: 1001;
+                max-width: 300px;
+                font-size: 14px;
+                box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            `;
+            successDiv.textContent = message;
+            document.body.appendChild(successDiv);
+
+            setTimeout(() => {
+                if (successDiv.parentNode) {
+                    successDiv.parentNode.removeChild(successDiv);
+                }
+            }, 3000);
+        }
+
         // Listen for real-time updates
         function setupRealtimeListeners() {
-            // Movement status
-            database.ref('Movement').on('value', (snapshot) => {
-                const movement = snapshot.val();
-                updateVehicleStatus(movement);
-                updateLastUpdate();
-            });
+            if (!database) {
+                console.error('Database not initialized');
+                return;
+            }
 
-            // Temperature
-            database.ref('sensor/temperature').on('value', (snapshot) => {
-                const temperature = snapshot.val();
-                updateTemperature(temperature);
-                updateLastUpdate();
-            });
+            try {
+                // Movement status
+                database.ref('Movement').on('value', (snapshot) => {
+                    const movement = snapshot.val();
+                    updateVehicleStatus(movement);
+                    updateLastUpdate();
+                }, (error) => {
+                    console.error('Error reading Movement:', error);
+                    showErrorMessage('Error reading movement data');
+                });
 
-            // Warnings
-            database.ref('Warnings').on('value', (snapshot) => {
-                const warnings = snapshot.val();
-                updateWarnings(warnings);
-                updateLastUpdate();
-            });
+                // Temperature
+                database.ref('sensor/temperature').on('value', (snapshot) => {
+                    const temperature = snapshot.val();
+                    updateTemperature(temperature);
+                    updateLastUpdate();
+                }, (error) => {
+                    console.error('Error reading temperature:', error);
+                    showErrorMessage('Error reading temperature data');
+                });
 
-            // Selected item
-            database.ref('selectedItem').on('value', (snapshot) => {
-                const selectedItem = snapshot.val();
-                updateProductSelector(selectedItem);
-                updateLastUpdate();
-            });
+                // Warnings
+                database.ref('Warnings').on('value', (snapshot) => {
+                    const warnings = snapshot.val();
+                    updateWarnings(warnings);
+                    updateLastUpdate();
+                }, (error) => {
+                    console.error('Error reading warnings:', error);
+                    showErrorMessage('Error reading warnings data');
+                });
 
-            // Connection monitoring
-            database.ref('.info/connected').on('value', (snapshot) => {
-                updateConnectionStatus(snapshot.val());
-            });
+                // Selected item
+                database.ref('selectedItem').on('value', (snapshot) => {
+                    const selectedItem = snapshot.val();
+                    updateProductSelector(selectedItem);
+                    updateLastUpdate();
+                }, (error) => {
+                    console.error('Error reading selected item:', error);
+                    showErrorMessage('Error reading product selection');
+                });
+
+                // Connection monitoring
+                database.ref('.info/connected').on('value', (snapshot) => {
+                    updateConnectionStatus(snapshot.val());
+                }, (error) => {
+                    console.error('Error monitoring connection:', error);
+                });
+
+                console.log('Real-time listeners setup successfully');
+            } catch (error) {
+                console.error('Error setting up listeners:', error);
+                showErrorMessage('Error setting up real-time listeners');
+            }
         }
 
         // Update last update time
@@ -605,26 +699,93 @@
 
         // Initialize the dashboard
         function initializeDashboard() {
-            try {
-                setupRealtimeListeners();
-                console.log('Dashboard initialized successfully');
-            } catch (error) {
-                console.error('Error initializing dashboard:', error);
-                updateConnectionStatus(false);
+            console.log('Initializing dashboard...');
+
+            // Check if Firebase is loaded
+            if (typeof firebase === 'undefined') {
+                console.error('Firebase SDK not loaded');
+                showErrorMessage('Firebase SDK failed to load. Please check your internet connection.');
+                return;
             }
+
+            // Initialize Firebase
+            if (!initializeFirebase()) {
+                return;
+            }
+
+            // Setup listeners
+            setupRealtimeListeners();
+
+            // Test connection
+            testFirebaseConnection();
+        }
+
+        // Test Firebase connection
+        function testFirebaseConnection() {
+            if (!database) return;
+
+            database.ref('.info/connected').once('value')
+                .then((snapshot) => {
+                    console.log('Connection test result:', snapshot.val());
+                    if (!snapshot.val()) {
+                        showErrorMessage('Unable to connect to Firebase. Please check database rules and internet connection.');
+                    } else {
+                        console.log('Successfully connected to Firebase');
+                    }
+                })
+                .catch((error) => {
+                    console.error('Connection test failed:', error);
+                    showErrorMessage('Firebase connection test failed: ' + error.message);
+                });
         }
 
         // Start the dashboard when the page loads
         window.addEventListener('load', () => {
-            initializeDashboard();
+            console.log('Page loaded, initializing dashboard...');
+
+            // Add a small delay to ensure Firebase SDK is fully loaded
+            setTimeout(() => {
+                initializeDashboard();
+            }, 1000);
+        });
+
+        // Handle Firebase script loading errors
+        window.addEventListener('error', (event) => {
+            if (event.filename && event.filename.includes('firebase')) {
+                console.error('Firebase script loading error:', event);
+                showErrorMessage('Failed to load Firebase scripts. Please check your internet connection.');
+            }
         });
 
         // Handle page visibility changes
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible' && !isConnected) {
-                initializeDashboard();
+                console.log('Page became visible, attempting reconnection...');
+                setTimeout(() => {
+                    initializeDashboard();
+                }, 500);
             }
         });
+
+        // Debug function to check Firebase status
+        function debugFirebaseStatus() {
+            console.log('Firebase apps:', firebase.apps);
+            console.log('Database instance:', database);
+            console.log('Connection status:', isConnected);
+
+            if (database) {
+                database.ref('Movement').once('value')
+                    .then((snapshot) => {
+                        console.log('Movement data:', snapshot.val());
+                    })
+                    .catch((error) => {
+                        console.error('Error reading Movement:', error);
+                    });
+            }
+        }
+
+        // Expose debug function globally for troubleshooting
+        window.debugFirebase = debugFirebaseStatus;
     </script>
 </body>
 
