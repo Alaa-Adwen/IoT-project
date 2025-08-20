@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Truck Tracking Dashboard - Gaza Relief Operations</title>
+
+    <!-- Firebase SDK -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.23.0/firebase-app-compat.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.23.0/firebase-database-compat.min.js"></script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .dashboard-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            backdrop-filter: blur(10px);
+        }
+
+        .header {
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
+            animation: pulse 4s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                transform: scale(1) rotate(0deg);
+            }
+
+            50% {
+                transform: scale(1.1) rotate(180deg);
+            }
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+            position: relative;
+            z-index: 1;
+        }
+
+        .main-content {
+            padding: 30px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+            border-left: 5px solid #3498db;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15);
+        }
+
+        .card h3 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+            font-size: 1.3rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-card {
+            border-left-color: #27ae60;
+        }
+
+        .temperature-card {
+            border-left-color: #e74c3c;
+        }
+
+        .warnings-card {
+            border-left-color: #f39c12;
+        }
+
+        .control-card {
+            border-left-color: #9b59b6;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 25px;
+            font-weight: bold;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .status-moving {
+            background: linear-gradient(45deg, #27ae60, #2ecc71);
+            color: white;
+            animation: moveIndicator 2s ease-in-out infinite;
+        }
+
+        .status-stable {
+            background: linear-gradient(45deg, #e74c3c, #c0392b);
+            color: white;
+            animation: stableIndicator 3s ease-in-out infinite;
+        }
+
+        @keyframes moveIndicator {
+
+            0%,
+            100% {
+                transform: translateX(0);
+            }
+
+            50% {
+                transform: translateX(5px);
+            }
+        }
+
+        @keyframes stableIndicator {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.7;
+            }
+        }
+
+        .temperature-display {
+            font-size: 3rem;
+            font-weight: bold;
+            color: #e74c3c;
+            text-align: center;
+            margin: 15px 0;
+            position: relative;
+        }
+
+        .temperature-unit {
+            font-size: 1.5rem;
+            vertical-align: top;
+        }
+
+        .temperature-bar {
+            width: 100%;
+            height: 20px;
+            background: #ecf0f1;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 15px;
+            position: relative;
+        }
+
+        .temperature-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #3498db, #e74c3c);
+            transition: width 0.5s ease;
+            border-radius: 10px;
+        }
+
+        .warning-item {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 10px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: all 0.3s ease;
+        }
+
+        .warning-item.active {
+            background: #f8d7da;
+            border-color: #f5c6cb;
+            animation: warningPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes warningPulse {
+
+            0%,
+            100% {
+                box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.4);
+            }
+
+            50% {
+                box-shadow: 0 0 0 10px rgba(220, 53, 69, 0);
+            }
+        }
+
+        .warning-icon {
+            font-size: 1.5rem;
+            color: #f39c12;
+        }
+
+        .warning-text {
+            flex: 1;
+            font-weight: 500;
+        }
+
+        .product-selector {
+            width: 100%;
+            padding: 15px;
+            font-size: 1.1rem;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            background: white;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .product-selector:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2);
+        }
+
+        .product-selector:hover {
+            border-color: #3498db;
+        }
+
+        .connection-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            border-radius: 25px;
+            color: white;
+            font-weight: bold;
+            z-index: 1000;
+            transition: all 0.3s ease;
+        }
+
+        .connected {
+            background: linear-gradient(45deg, #27ae60, #2ecc71);
+        }
+
+        .disconnected {
+            background: linear-gradient(45deg, #e74c3c, #c0392b);
+            animation: disconnectedPulse 1s ease-in-out infinite;
+        }
+
+        @keyframes disconnectedPulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.7;
+            }
+        }
+
+        .icon {
+            font-size: 1.2rem;
+        }
+
+        .last-update {
+            text-align: center;
+            color: #7f8c8d;
+            font-style: italic;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #ecf0f1;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2rem;
+            }
+
+            .main-content {
+                grid-template-columns: 1fr;
+                padding: 15px;
+            }
+
+            .temperature-display {
+                font-size: 2.5rem;
+            }
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="connection-status" id="connectionStatus">
+        <div class="loading"></div> Connecting...
+    </div>
+
+    <div class="dashboard-container">
+        <div class="header">
+            <h1>🚛 Truck Tracking Dashboard</h1>
+            <p>Gaza Relief Operations - Real-time Monitoring System</p>
+        </div>
+
+        <div class="main-content">
+            <!-- Vehicle Status Card -->
+            <div class="card status-card">
+                <h3>
+                    <span class="icon">🚚</span>
+                    Vehicle Status
+                </h3>
+                <div id="vehicleStatus" class="status-indicator status-stable">
+                    <div class="loading"></div> Loading...
+                </div>
+            </div>
+
+            <!-- Temperature Card -->
+            <div class="card temperature-card">
+                <h3>
+                    <span class="icon">🌡️</span>
+                    Cargo Temperature
+                </h3>
+                <div class="temperature-display" id="temperatureDisplay">
+                    <div class="loading"></div>
+                </div>
+                <div class="temperature-bar">
+                    <div class="temperature-fill" id="temperatureFill" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <!-- Warnings Card -->
+            <div class="card warnings-card">
+                <h3>
+                    <span class="icon">⚠️</span>
+                    System Warnings
+                </h3>
+                <div id="warningsContainer">
+                    <div class="warning-item">
+                        <div class="loading"></div>
+                        <span>Loading warnings...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Product Selection Card -->
+            <div class="card control-card">
+                <h3>
+                    <span class="icon">📦</span>
+                    Cargo Type Selection
+                </h3>
+                <select class="product-selector" id="productSelector">
+                    <option value="">Select cargo type...</option>
+                    <option value="fruits">🍎 Fruits</option>
+                    <option value="meat">🥩 Meat</option>
+                    <option value="medicine">💊 Medicine</option>
+                </select>
+                <div class="last-update" id="lastUpdate">
+                    Last updated: Never
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyCOJTJ1etcpZVhVA-VzoiRCRwjhLBF3uCE",
+            authDomain: "track-truck-system.firebaseapp.com",
+            databaseURL: "https://track-truck-system-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "track-truck-system",
+            storageBucket: "track-truck-system.appspot.com",
+            messagingSenderId: "13148890889",
+            appId: "1:13148890889:web:your-app-id"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
+        // DOM elements
+        const connectionStatus = document.getElementById('connectionStatus');
+        const vehicleStatus = document.getElementById('vehicleStatus');
+        const temperatureDisplay = document.getElementById('temperatureDisplay');
+        const temperatureFill = document.getElementById('temperatureFill');
+        const warningsContainer = document.getElementById('warningsContainer');
+        const productSelector = document.getElementById('productSelector');
+        const lastUpdate = document.getElementById('lastUpdate');
+
+        // Connection status
+        let isConnected = false;
+
+        function updateConnectionStatus(connected) {
+            isConnected = connected;
+            if (connected) {
+                connectionStatus.className = 'connection-status connected';
+                connectionStatus.innerHTML = '✅ Connected to Firebase';
+            } else {
+                connectionStatus.className = 'connection-status disconnected';
+                connectionStatus.innerHTML = '❌ Connection Lost';
+            }
+        }
+
+        // Update vehicle status
+        function updateVehicleStatus(movement) {
+            const statusElement = vehicleStatus;
+            if (movement === 'Moving' || movement === 'moving') {
+                statusElement.className = 'status-indicator status-moving';
+                statusElement.innerHTML = '🚛 Moving';
+            } else {
+                statusElement.className = 'status-indicator status-stable';
+                statusElement.innerHTML = '⏸️ Stable';
+            }
+        }
+
+        // Update temperature display
+        function updateTemperature(temp) {
+            if (temp !== undefined && temp !== null) {
+                temperatureDisplay.innerHTML = `${temp.toFixed(1)}<span class="temperature-unit">°C</span>`;
+
+                // Update temperature bar (0-50°C range)
+                const percentage = Math.min((temp / 50) * 100, 100);
+                temperatureFill.style.width = `${percentage}%`;
+
+                // Change color based on temperature
+                if (temp > 25) {
+                    temperatureFill.style.background = 'linear-gradient(90deg, #e74c3c, #c0392b)';
+                } else if (temp > 15) {
+                    temperatureFill.style.background = 'linear-gradient(90deg, #f39c12, #e67e22)';
+                } else {
+                    temperatureFill.style.background = 'linear-gradient(90deg, #3498db, #2980b9)';
+                }
+            } else {
+                temperatureDisplay.innerHTML = 'N/A';
+                temperatureFill.style.width = '0%';
+            }
+        }
+
+        // Update warnings display
+        function updateWarnings(warnings) {
+            warningsContainer.innerHTML = '';
+
+            if (!warnings) {
+                warningsContainer.innerHTML = `
+                    <div class="warning-item">
+                        <span class="warning-icon">ℹ️</span>
+                        <span class="warning-text">No warnings at this time</span>
+                    </div>
+                `;
+                return;
+            }
+
+            // Check movement warnings
+            if (warnings.movment && warnings.movment !== '......') {
+                const warningDiv = document.createElement('div');
+                warningDiv.className = 'warning-item active';
+                warningDiv.innerHTML = `
+                    <span class="warning-icon">🚨</span>
+                    <span class="warning-text">${warnings.movment}</span>
+                `;
+                warningsContainer.appendChild(warningDiv);
+            }
+
+            // Check temperature warnings
+            if (warnings.temp && warnings.temp !== '......') {
+                const warningDiv = document.createElement('div');
+                warningDiv.className = 'warning-item active';
+                warningDiv.innerHTML = `
+                    <span class="warning-icon">🌡️</span>
+                    <span class="warning-text">${warnings.temp}</span>
+                `;
+                warningsContainer.appendChild(warningDiv);
+            }
+
+            // If no active warnings, show success message
+            if (warningsContainer.children.length === 0) {
+                warningsContainer.innerHTML = `
+                    <div class="warning-item">
+                        <span class="warning-icon">✅</span>
+                        <span class="warning-text">All systems operating normally</span>
+                    </div>
+                `;
+            }
+        }
+
+        // Update selected product
+        function updateProductSelector(selectedItem) {
+            if (selectedItem && selectedItem !== '......') {
+                productSelector.value = selectedItem;
+            }
+        }
+
+        // Handle product selection change
+        productSelector.addEventListener('change', function () {
+            const selectedProduct = this.value;
+            if (selectedProduct) {
+                database.ref('selectedItem').set(selectedProduct)
+                    .then(() => {
+                        console.log('Product selection updated successfully');
+                    })
+                    .catch((error) => {
+                        console.error('Error updating product selection:', error);
+                        alert('Failed to update product selection. Please try again.');
+                    });
+            }
+        });
+
+        // Listen for real-time updates
+        function setupRealtimeListeners() {
+            // Movement status
+            database.ref('Movement').on('value', (snapshot) => {
+                const movement = snapshot.val();
+                updateVehicleStatus(movement);
+                updateLastUpdate();
+            });
+
+            // Temperature
+            database.ref('sensor/temperature').on('value', (snapshot) => {
+                const temperature = snapshot.val();
+                updateTemperature(temperature);
+                updateLastUpdate();
+            });
+
+            // Warnings
+            database.ref('Warnings').on('value', (snapshot) => {
+                const warnings = snapshot.val();
+                updateWarnings(warnings);
+                updateLastUpdate();
+            });
+
+            // Selected item
+            database.ref('selectedItem').on('value', (snapshot) => {
+                const selectedItem = snapshot.val();
+                updateProductSelector(selectedItem);
+                updateLastUpdate();
+            });
+
+            // Connection monitoring
+            database.ref('.info/connected').on('value', (snapshot) => {
+                updateConnectionStatus(snapshot.val());
+            });
+        }
+
+        // Update last update time
+        function updateLastUpdate() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString();
+            lastUpdate.textContent = `Last updated: ${timeString}`;
+        }
+
+        // Initialize the dashboard
+        function initializeDashboard() {
+            try {
+                setupRealtimeListeners();
+                console.log('Dashboard initialized successfully');
+            } catch (error) {
+                console.error('Error initializing dashboard:', error);
+                updateConnectionStatus(false);
+            }
+        }
+
+        // Start the dashboard when the page loads
+        window.addEventListener('load', () => {
+            initializeDashboard();
+        });
+
+        // Handle page visibility changes
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' && !isConnected) {
+                initializeDashboard();
+            }
+        });
+    </script>
+</body>
+
+</html>
